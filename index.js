@@ -97,11 +97,14 @@ function formatWithCursor(text, opts, addAlignmentSize) {
 
   let cursorOffset;
   if (opts.cursorOffset >= 0) {
-    const cursorNodeAndParents = findNodeAtOffset(ast, opts.cursorOffset, opts);
-    const cursorNode = cursorNodeAndParents.node;
-    if (cursorNode) {
-      cursorOffset = opts.cursorOffset - opts.locStart(cursorNode);
-      opts.cursorNode = cursorNode;
+    const { node, offset } = getRelativeCursorPosition(
+      ast,
+      opts.cursorOffset,
+      opts
+    );
+    if (node) {
+      cursorOffset = offset;
+      opts.cursorNode = node;
     }
   }
 
@@ -205,6 +208,70 @@ function findNodeAtOffset(node, offset, options, predicate, parentNodes) {
       };
     }
   }
+}
+
+function getRelativeCursorPosition(rootNode, offset, options) {
+  // do depth-first traversal of leaf nodes to find closest one
+  const nodeStack = [rootNode];
+  let lastLeaf = null;
+
+  while (nodeStack.length > 0) {
+    const node = nodeStack.pop();
+
+    const start = options.locStart(node);
+    const end = options.locEnd(node);
+
+    const childNodes = comments.getSortedChildNodes(
+      node,
+      undefined /* text */,
+      options
+    );
+
+    if (childNodes.length === 0) {
+      // this is a leaf
+      if (start <= offset && end > offset) {
+        // the cursor is within this leaf
+        return {
+          node,
+          offset: offset - start
+        };
+      }
+
+      if (start > offset) {
+        // the cursor is between this and the last leaf
+        // return the closest one
+        if (lastLeaf) {
+          const lastLeafProximity = offset - options.locEnd(lastLeaf);
+          const currentLeafProximity = start - offset;
+          if (lastLeafProximity < currentLeafProximity) {
+            return {
+              node: lastLeaf,
+              // put the cursor at the end of the last leaf
+              offset: options.locEnd(lastLeaf) - options.locStart(lastLeaf)
+            };
+          }
+        }
+
+        return {
+          node,
+          // put the cursor at the start of this leaf
+          offset: 0
+        };
+      }
+
+      lastLeaf = node;
+    } else {
+      for (const childNode of childNodes.reverse()) {
+        nodeStack.push(childNode);
+      }
+    }
+  }
+
+  // cursor is past the end of the last leaf
+  return {
+    node: lastLeaf,
+    offset: options.locEnd(lastLeaf) - options.locStart(lastLeaf)
+  };
 }
 
 // See https://www.ecma-international.org/ecma-262/5.1/#sec-A.5
