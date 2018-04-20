@@ -97,14 +97,33 @@ function formatWithCursor(text, opts, addAlignmentSize) {
 
   let cursorOffset;
   if (opts.cursorOffset >= 0) {
-    const { node, offset } = getRelativeCursorPosition(
-      ast,
-      opts.cursorOffset,
-      opts
-    );
-    if (node) {
-      cursorOffset = offset;
-      opts.cursorNode = node;
+    if (!text[opts.cursorOffset] || text[opts.cursorOffset].match(/\s/)) {
+      // cursor is positioned over whitespace, let's find it's nearest ast
+      // node and put it at the start or end of that
+      const { node, offset } = findClosestLeafNode(
+        ast,
+        opts.cursorOffset,
+        opts
+      );
+
+      if (node) {
+        cursorOffset = offset;
+        opts.cursorNode = node;
+      }
+    } else {
+      // it's not positioned over whitespace and therefore is encompasased by
+      // a (possibly not leaf) node. Let's use the old style of offset
+      // calculation
+      const cursorNodeAndParents = findNodeAtOffset(
+        ast,
+        opts.cursorOffset,
+        opts
+      );
+      const cursorNode = cursorNodeAndParents.node;
+      if (cursorNode) {
+        cursorOffset = opts.cursorOffset - opts.locStart(cursorNode);
+        opts.cursorNode = cursorNode;
+      }
     }
   }
 
@@ -210,7 +229,7 @@ function findNodeAtOffset(node, offset, options, predicate, parentNodes) {
   }
 }
 
-function getRelativeCursorPosition(rootNode, offset, options) {
+function findClosestLeafNode(rootNode, offset, options) {
   // do depth-first traversal of leaf nodes to find closest one
   const nodeStack = [rootNode];
   let lastLeaf = null;
@@ -231,6 +250,9 @@ function getRelativeCursorPosition(rootNode, offset, options) {
       // this is a leaf
       if (start <= offset && end > offset) {
         // the cursor is within this leaf
+        // this probably won't happen given that at the time
+        // of writing this function only gets called when
+        // the cursor is positioned over whitespace
         return {
           node,
           offset: offset - start
