@@ -113,6 +113,7 @@ function formatWithCursor(text, opts, addAlignmentSize) {
   if (hasUnicodeBOM) {
     str = String.fromCharCode(UTF8BOM) + str;
   }
+
   const cursorOffsetResult = toStringResult.cursor;
   ensureAllCommentsPrinted(astComments);
   // Remove extra leading indentation as well as the added indentation after last newline
@@ -121,9 +122,39 @@ function formatWithCursor(text, opts, addAlignmentSize) {
   }
 
   if (cursorOffset !== undefined) {
+    const originalCursorText = text.slice(
+      opts.locStart(opts.cursorNode),
+      opts.locEnd(opts.cursorNode)
+    );
+
+    if (originalCursorText === toStringResult.cursorText) {
+      return {
+        formatted: str,
+        cursorOffset: cursorOffsetResult + cursorOffset
+      };
+    }
+
+    const CURSOR = Symbol("cursor");
+    const original = originalCursorText.split("");
+    original.splice(cursorOffset, 0, CURSOR);
+    const formatted = toStringResult.cursorText.split("");
+
+    const diff = require("diff").diffArrays(original, formatted);
+
+    let i = 0;
+    for (const { count, value, removed } of diff) {
+      if (removed) {
+        if (value.includes(CURSOR)) {
+          break;
+        }
+      } else {
+        i += count;
+      }
+    }
+
     return {
       formatted: str,
-      cursorOffset: cursorOffsetResult + cursorOffset
+      cursorOffset: cursorOffsetResult + i
     };
   }
 

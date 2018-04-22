@@ -27,6 +27,7 @@ function parse(text /*, parsers, opts*/) {
 
   delete ast.tokens;
   includeShebang(text, ast);
+  ast.range[0] = 0;
   return ast;
 }
 
